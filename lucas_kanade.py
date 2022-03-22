@@ -187,10 +187,12 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     y_flattened = y_mesh.flatten() + v.flatten()
 
     flattened_image = image.flatten()
-
-    griddata([x_flattened, y_flattened], flattened_image, [x_flattened, y_flattened])
-
+    # first - where we know the points
+    # values - what are the value in those points
+    # xi - the grid
+    image_warp = griddata((x_flattened, y_flattened), flattened_image, (x_mesh, y_mesh), fill_value=np.nan)
     # step 3: fill the np.nan values
+    #image_warp[np.isnan(image_warp)] = image[np.isnan(image_warp)]
 
     return image_warp
 
