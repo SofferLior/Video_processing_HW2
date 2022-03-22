@@ -6,8 +6,8 @@ from scipy.interpolate import griddata
 
 
 # FILL IN YOUR ID
-ID1 = 123456789
-ID2 = 987654321
+ID1 = 203135058
+ID2 = 203764170
 
 
 PYRAMID_FILTER = 1.0 / 256 * np.array([[1, 4, 6, 4, 1],
@@ -104,11 +104,30 @@ def lucas_kanade_step(I1: np.ndarray,
         original image. dv encodes the optical flow parameters in rows and du
         in columns.
     """
-    """INSERT YOUR CODE HERE.
-    Calculate du and dv correctly.
-    """
+
+    # calc Ix, Iy and It
+    Ix = signal.convolve2d(I2, X_DERIVATIVE_FILTER, boundary='symm', mode='same')
+    Iy = signal.convolve2d(I2, Y_DERIVATIVE_FILTER, boundary='symm', mode='same')
+    It = I2 - I1
+
+    # calc du and dv
     du = np.zeros(I1.shape)
     dv = np.zeros(I1.shape)
+    boundary = int(WINDOW_SIZE/2)
+    for idx_row in range(boundary, I1.shape[0] - boundary):
+        for idx_col in range(boundary, I1.shape[1] - boundary):
+            A_Ix = Ix[idx_row-boundary:idx_row+boundary+1, idx_col-boundary:idx_col+boundary+1].reshape(np.power(WINDOW_SIZE,2))
+            A_Iy = Iy[idx_row - boundary:idx_row + boundary + 1, idx_col - boundary:idx_col + boundary + 1].reshape(np.power(WINDOW_SIZE,2))
+            A = np.column_stack((A_Ix,A_Iy))
+            b = It[idx_row-boundary:idx_row+boundary+1, idx_col-boundary:idx_col+boundary+1].reshape(np.power(WINDOW_SIZE,2))
+            try:
+                x, res, rank, s = np.linalg.lstsq(A,b,rcond=-1)  # TODO: check rcond
+                du[idx_row,idx_col] = x[0]
+                dv[idx_row,idx_col] = x[1]
+            except np.linalg.LinAlgError:
+                print('did not convarge')
+                pass
+
     return du, dv
 
 
