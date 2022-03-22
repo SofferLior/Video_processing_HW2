@@ -65,6 +65,11 @@ def build_pyramid(image: np.ndarray, num_levels: int) -> list[np.ndarray]:
     """
     pyramid = [image.copy()]
     """INSERT YOUR CODE HERE."""
+    for level in range(num_levels):
+        blur_level = signal.convolve2d(pyramid[level], PYRAMID_FILTER, boundary='symm', mode='same')
+        blur_level_sampled = blur_level[::2, ::2]
+        pyramid.append(blur_level_sampled)
+
     return pyramid
 
 
