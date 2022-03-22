@@ -150,6 +150,29 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     """INSERT YOUR CODE HERE.
     Replace image_warp with something else.
     """
+    # step 1: resize + norm
+    # todo: rewrite here the resize+norm
+    resized_u = cv2.resize(u, (image.shape[1], image.shape[0]))
+    u_factor = u.shape[1] / resized_u.shape[0]
+    resized_v = cv2.resize(v, (image.shape[1], image.shape[0]))
+    v_factor = v.shape[1] / resized_v.shape[0]
+
+    # step 2: wrap image
+    # create a mesh grid
+    x = np.arange(image.shape[1])
+    y = np.arange(image.shape[0])
+    [x_mesh, y_mesh] = np.meshgrid(x, y)
+
+    # create shifted grid according to u,v
+    x_flattened = x_mesh.flatten() + u.flatten()
+    y_flattened = y_mesh.flatten() + v.flatten()
+
+    flattened_image = image.flatten()
+
+    griddata([x_flattened, y_flattened], flattened_image, [x_flattened, y_flattened])
+
+    # step 3: fill the np.nan values
+
     return image_warp
 
 
