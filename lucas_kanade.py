@@ -165,16 +165,15 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     Returns:
         image_warp: np.ndarray. Warped image.
     """
-    image_warp = image.copy()
-    """INSERT YOUR CODE HERE.
-    Replace image_warp with something else.
-    """
+
     # step 1: resize + norm
-    # todo: rewrite here the resize+norm
-    resized_u = cv2.resize(u, (image.shape[1], image.shape[0]))
-    u_factor = u.shape[1] / resized_u.shape[0]
-    resized_v = cv2.resize(v, (image.shape[1], image.shape[0]))
-    v_factor = v.shape[1] / resized_v.shape[0]
+    # todo: check if this is ok
+    u_factor = image.shape[1] / u.shape[1]
+    v_factor = image.shape[0] / v.shape[0]
+    u = cv2.resize(u, (image.shape[1], image.shape[0]))
+    v = cv2.resize(v, (image.shape[1], image.shape[0]))
+    u = u/u_factor
+    v = v/v_factor
 
     # step 2: wrap image
     # create a mesh grid
@@ -192,7 +191,9 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     # xi - the grid
     image_warp = griddata((x_flattened, y_flattened), flattened_image, (x_mesh, y_mesh), fill_value=np.nan)
     # step 3: fill the np.nan values
-    #image_warp[np.isnan(image_warp)] = image[np.isnan(image_warp)]
+    if len(image_warp[np.isnan(image_warp)]):
+        print('filling NAN values')
+        image_warp[np.isnan(image_warp)] = image[np.isnan(image_warp)]
 
     return image_warp
 
@@ -238,6 +239,7 @@ def lucas_kanade_optical_flow(I1: np.ndarray,
     """INSERT YOUR CODE HERE.
         Replace image_warp with something else.
         """
+    # TODO: not sure what to implement here
     h_factor = int(np.ceil(I1.shape[0] / (2 ** (num_levels - 1 + 1))))
     w_factor = int(np.ceil(I1.shape[1] / (2 ** (num_levels - 1 + 1))))
     IMAGE_SIZE = (w_factor * (2 ** (num_levels - 1 + 1)),
@@ -252,10 +254,19 @@ def lucas_kanade_optical_flow(I1: np.ndarray,
     # start from u and v in the size of smallest image
     u = np.zeros(pyarmid_I2[-1].shape)
     v = np.zeros(pyarmid_I2[-1].shape)
-    """INSERT YOUR CODE HERE.
-       Replace u and v with their true value."""
-    u = np.zeros(I1.shape)
-    v = np.zeros(I1.shape)
+
+    for pyramid_level in range(len(pyarmid_I2)-1, -1, -1):
+        cur_I2 = pyarmid_I2[pyramid_level]
+        for iter_num in range(max_iter):
+            print(f'Pyramid level: {pyramid_level}, iteration: {iter_num}/{max_iter}')
+            cur_I2 = warp_image(cur_I2, u, v)
+            u,v = lucas_kanade_step(pyramid_I1[pyramid_level],cur_I2, window_size)
+        # done iterations, need to complete one more wrap
+        if pyramid_level:
+            # will be executed only when not the image's level
+            u = cv2.resize(u, pyramid_I1[pyramid_level-1].shape)
+            v = cv2.resize(u, pyramid_I1[pyramid_level - 1].shape)
+
     return u, v
 
 

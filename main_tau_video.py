@@ -8,8 +8,8 @@ from lucas_kanade import lucas_kanade_video_stabilization, \
 
 
 # FILL IN YOUR ID
-ID1 = '123456789'
-ID2 = '987654321'
+ID1 = '20313508'
+ID2 = '203764170'
 
 # Choose parameters
 WINDOW_SIZE_TAU = 5  # Add your value here!
