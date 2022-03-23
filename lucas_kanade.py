@@ -320,8 +320,48 @@ def lucas_kanade_video_stabilization(input_video_path: str,
        (7) Do not forget to gracefully close all VideoCapture and to destroy
        all windows.
     """
-    """INSERT YOUR CODE HERE."""
-    pass
+    input_cap = cv2.VideoCapture(input_video_path)
+    # create output video
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    fps = input_cap.get(cv2.CAP_PROP_FPS)
+    w = int(input_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(input_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    out_cap = cv2.VideoWriter(output_video_path,fourcc, fps, (w,h))
+    frame_count = int(input_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    # first frame
+    rval, first_frame = input_cap.read()
+    #first_frame_gray = np.dot(first_frame[...,:3], [0.299, 0.587, 0.114])
+    first_frame_gray = cv2.cvtColor(first_frame, cv2.COLOR_RGB2GRAY)
+    out_cap.write(first_frame_gray)
+
+    # resize first frame
+    h_factor = int(np.ceil(first_frame_gray.shape[0] / (2 ** num_levels)))
+    w_factor = int(np.ceil(first_frame_gray.shape[1] / (2 ** num_levels)))
+    IMAGE_SIZE = (w_factor * (2 ** num_levels),
+                  h_factor * (2 ** num_levels))
+    if first_frame_gray.shape != IMAGE_SIZE:
+        first_frame_gray = cv2.resize(first_frame_gray, IMAGE_SIZE)
+
+
+    # create u, v
+    u = np.zeros(first_frame_gray.shape)
+    v = np.zeros(first_frame_gray.shape)
+
+    # create progress bar
+    for i in tqdm(range(1, frame_count)):
+        rval, frame = input_cap.read()
+        if rval:
+            grey_frame = cv2.cvtColor(first_frame, cv2.COLOR_RGB2GRAY)  # todo:RGB or BGR?
+            grey_frame = cv2.resize(grey_frame, IMAGE_SIZE)
+            #todo: complete this
+            warped_frame = warp_image(grey_frame, u, v)
+            out_cap.write(warped_frame)
+
+    input_cap.release()
+    out_cap.release()
+
+    print('done')
 
 
 def faster_lucas_kanade_step(I1: np.ndarray,
