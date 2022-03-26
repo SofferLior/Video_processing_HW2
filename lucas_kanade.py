@@ -266,10 +266,8 @@ def lucas_kanade_optical_flow(I1: np.ndarray,
             dim = (pyramid_I1[pyramid_level-1].shape[1], pyramid_I1[pyramid_level-1].shape[0])
             u = cv2.resize(u, dim)
             v = cv2.resize(u, dim)
-            u_factor = dim[0] / u.shape[1]
-            v_factor = dim[1] / v.shape[0]
-            u = u / u_factor
-            v = v / v_factor
+            u = 2*u
+            v = 2*v
         #print(f'pyramdi level: {pyramid_level}, image shapr{pyramid_I1[pyramid_level].shape}, u shape: {u.shape}')
     return u, v
 
@@ -495,6 +493,8 @@ def faster_lucas_kanade_optical_flow(
             dim = (pyramid_I1[pyramid_level-1].shape[1], pyramid_I1[pyramid_level-1].shape[0])
             u = cv2.resize(u, dim)
             v = cv2.resize(u, dim)
+            u = 2*u
+            v = 2*v
     return u, v
 
 
