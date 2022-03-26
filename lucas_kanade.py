@@ -64,11 +64,11 @@ def build_pyramid(image: np.ndarray, num_levels: int) -> list[np.ndarray]:
     We use a slightly different decimation process from this function.
     """
     pyramid = [image.copy()]
-    """INSERT YOUR CODE HERE."""
     for level in range(num_levels):
         blur_level = signal.convolve2d(pyramid[level], PYRAMID_FILTER, boundary='symm', mode='same')
         blur_level_sampled = blur_level[::2, ::2]
         pyramid.append(blur_level_sampled)
+        #print(f'Pyramid level {level}, shape: {blur_level.shape}')
 
     return pyramid
 
@@ -118,15 +118,16 @@ def lucas_kanade_step(I1: np.ndarray,
     # calc du and dv
     du = np.zeros(I1.shape)
     dv = np.zeros(I1.shape)
-    boundary = int(WINDOW_SIZE/2)
+    boundary = int(window_size/2)
+    squared_N = np.power(window_size,2)
     for idx_row in range(boundary, I1.shape[0] - boundary):
         for idx_col in range(boundary, I1.shape[1] - boundary):
-            A_Ix = Ix[idx_row-boundary:idx_row+boundary+1, idx_col-boundary:idx_col+boundary+1].reshape(np.power(WINDOW_SIZE,2))
-            A_Iy = Iy[idx_row - boundary:idx_row + boundary + 1, idx_col - boundary:idx_col + boundary + 1].reshape(np.power(WINDOW_SIZE,2))
+            A_Ix = Ix[idx_row-boundary:idx_row+boundary+1, idx_col-boundary:idx_col+boundary+1].reshape(squared_N)
+            A_Iy = Iy[idx_row - boundary:idx_row + boundary + 1, idx_col - boundary:idx_col + boundary + 1].reshape(squared_N)
             A = np.column_stack((A_Ix,A_Iy))
-            b = It[idx_row-boundary:idx_row+boundary+1, idx_col-boundary:idx_col+boundary+1].reshape(np.power(WINDOW_SIZE,2))
+            b = It[idx_row-boundary:idx_row+boundary+1, idx_col-boundary:idx_col+boundary+1].reshape(squared_N)
             try:
-                x, res, rank, s = np.linalg.lstsq(A,b,rcond=-1)  # TODO: check rcond
+                x, res, rank, s = np.linalg.lstsq(A,b,rcond=None)  # TODO: check rcond
                 du[idx_row,idx_col] = x[0]
                 dv[idx_row,idx_col] = x[1]
             except np.linalg.LinAlgError:
@@ -170,15 +171,16 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     # todo: check if this is ok
     u_factor = image.shape[1] / u.shape[1]
     v_factor = image.shape[0] / v.shape[0]
-    u = cv2.resize(u, (image.shape[1], image.shape[0]))
-    v = cv2.resize(v, (image.shape[1], image.shape[0]))
+    dim = (image.shape[1], image.shape[0])
+    u = cv2.resize(u, dim)
+    v = cv2.resize(v, dim)
     u = u/u_factor
     v = v/v_factor
 
     # step 2: wrap image
     # create a mesh grid
-    x = np.arange(image.shape[1])
-    y = np.arange(image.shape[0])
+    x = np.arange(dim[0])
+    y = np.arange(dim[1])
     [x_mesh, y_mesh] = np.meshgrid(x, y)
 
     # create shifted grid according to u,v
@@ -236,10 +238,6 @@ def lucas_kanade_optical_flow(I1: np.ndarray,
           image resize (using cv2.resize) to the next pyramid level resolution
           and scale u and v accordingly.
     """
-    """INSERT YOUR CODE HERE.
-        Replace image_warp with something else.
-        """
-    # TODO: not sure what to implement here
     h_factor = int(np.ceil(I1.shape[0] / (2 ** (num_levels - 1 + 1))))
     w_factor = int(np.ceil(I1.shape[1] / (2 ** (num_levels - 1 + 1))))
     IMAGE_SIZE = (w_factor * (2 ** (num_levels - 1 + 1)),
@@ -255,17 +253,24 @@ def lucas_kanade_optical_flow(I1: np.ndarray,
     u = np.zeros(pyarmid_I2[-1].shape)
     v = np.zeros(pyarmid_I2[-1].shape)
 
+    # note to myself - smallest level is the last
     for pyramid_level in range(len(pyarmid_I2)-1, -1, -1):
+        #print(f'pyramdi level: {pyramid_level}, image shapr{pyramid_I1[pyramid_level].shape}, u shape: {u.shape}')
         cur_I2 = pyarmid_I2[pyramid_level]
         for iter_num in range(max_iter):
-            # print(f'Pyramid level: {pyramid_level}, iteration: {iter_num}/{max_iter}')
             cur_I2 = warp_image(cur_I2, u, v)
             u,v = lucas_kanade_step(pyramid_I1[pyramid_level],cur_I2, window_size)
         # done iterations, need to complete one more wrap
         if pyramid_level:
             # will be executed only when not the image's level
-            u = cv2.resize(u, pyramid_I1[pyramid_level-1].shape)
-            v = cv2.resize(u, pyramid_I1[pyramid_level - 1].shape)
+            dim = (pyramid_I1[pyramid_level-1].shape[1], pyramid_I1[pyramid_level-1].shape[0])
+            u = cv2.resize(u, dim)
+            v = cv2.resize(u, dim)
+            u_factor = dim[0] / u.shape[1]
+            v_factor = dim[1] / v.shape[0]
+            u = u / u_factor
+            v = v / v_factor
+        #print(f'pyramdi level: {pyramid_level}, image shapr{pyramid_I1[pyramid_level].shape}, u shape: {u.shape}')
     return u, v
 
 
@@ -330,6 +335,8 @@ def lucas_kanade_video_stabilization(input_video_path: str,
 
     # first frame
     rval, first_frame = input_cap.read()
+    out_cap.write(first_frame)
+
     first_frame_gray = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
 
     # resize first frame
@@ -341,7 +348,6 @@ def lucas_kanade_video_stabilization(input_video_path: str,
     if first_frame_gray.shape != IMAGE_SIZE:
         first_frame_gray = cv2.resize(first_frame_gray, IMAGE_SIZE)
 
-    out_cap.write(first_frame)
     # create u, v
     u = np.zeros(first_frame_gray.shape)
     v = np.zeros(first_frame_gray.shape)
@@ -356,9 +362,9 @@ def lucas_kanade_video_stabilization(input_video_path: str,
         if rval:
             # a - resize frame
             grey_cur_frame = cv2.cvtColor(cur_frame, cv2.COLOR_BGR2GRAY)
-            grey_cur_frame = cv2.resize(grey_cur_frame, IMAGE_SIZE)
+            grey_cur_frame_resized = cv2.resize(grey_cur_frame, IMAGE_SIZE)
             # b - perform LK
-            u, v = lucas_kanade_optical_flow(prev_frame, grey_cur_frame, window_size, max_iter, num_levels)
+            u, v = lucas_kanade_optical_flow(prev_frame, grey_cur_frame_resized, window_size, max_iter, num_levels)
             # c - calc mean of u and v
             mean_u = np.mean(u[boarder:-boarder,boarder:-boarder])
             mean_v = np.mean(v[boarder:-boarder,boarder:-boarder])
@@ -373,10 +379,11 @@ def lucas_kanade_video_stabilization(input_video_path: str,
             prev_u = u
             prev_v = v
             # g - wrap
-            warped_frame = warp_image(grey_cur_frame, u, v)
+            warped_frame = warp_image(grey_cur_frame_resized, u, v)
             # save frame
             next_frame = warped_frame.astype(np.uint8)
             next_frame = cv2.cvtColor(next_frame, cv2.COLOR_GRAY2BGR)
+            # todo: this resize is not ok, need to think this trough
             next_frame = cv2.resize(next_frame, (w,h))
             out_cap.write(next_frame)
             cv2.imwrite("river_frames/frame%d.jpg" % i, next_frame)
@@ -411,9 +418,38 @@ def faster_lucas_kanade_step(I1: np.ndarray,
 
     du = np.zeros(I1.shape)
     dv = np.zeros(I1.shape)
-    """INSERT YOUR CODE HERE.
-    Calculate du and dv correctly.
-    """
+    if I1.shape[0] < 140 and I1.shape[1] < 140:  # TODO: what is small enough?
+        return lucas_kanade_step(I1, I2, window_size)
+    else:
+        # calc Ix, Iy and It
+        Ix = signal.convolve2d(I2, X_DERIVATIVE_FILTER, boundary='symm', mode='same')
+        Iy = signal.convolve2d(I2, Y_DERIVATIVE_FILTER, boundary='symm', mode='same')
+        It = I2 - I1
+
+        # calc du and dv
+        boundary = int(window_size / 2)
+        squared_N = np.power(window_size, 2)
+
+        corners = cv2.cornerHarris(I2.astype(np.float32), 5, 5, 0.05)
+        corners[corners<0.03*corners.max()] = 0
+        #print(f'number pf courners: {np.count_nonzero(corners)} shap:{I2.shape}')
+        for idx_row in range(boundary, I1.shape[0] - boundary):
+            for idx_col in range(boundary, I1.shape[1] - boundary):
+                if corners[idx_row,idx_col] != 0:
+                    A_Ix = Ix[idx_row - boundary:idx_row + boundary + 1, idx_col - boundary:idx_col + boundary + 1].reshape(
+                        squared_N)
+                    A_Iy = Iy[idx_row - boundary:idx_row + boundary + 1, idx_col - boundary:idx_col + boundary + 1].reshape(
+                        squared_N)
+                    A = np.column_stack((A_Ix, A_Iy))
+                    b = It[idx_row - boundary:idx_row + boundary + 1, idx_col - boundary:idx_col + boundary + 1].reshape(
+                        squared_N)
+                    try:
+                        x, res, rank, s = np.linalg.lstsq(A, b, rcond=None)  # TODO: check rcond
+                        du[idx_row, idx_col] = x[0]
+                        dv[idx_row, idx_col] = x[1]
+                    except np.linalg.LinAlgError:
+                        print('did not convarge')
+                        pass
     return du, dv
 
 
@@ -447,10 +483,18 @@ def faster_lucas_kanade_optical_flow(
     pyarmid_I2 = build_pyramid(I2, num_levels)  # create levels list for I1
     u = np.zeros(pyarmid_I2[-1].shape)  # create u in the size of smallest image
     v = np.zeros(pyarmid_I2[-1].shape)  # create v in the size of smallest image
-    """INSERT YOUR CODE HERE.
-    Replace u and v with their true value."""
-    u = np.zeros(I1.shape)
-    v = np.zeros(I1.shape)
+
+    for pyramid_level in range(len(pyarmid_I2)-1, -1, -1):
+        cur_I2 = pyarmid_I2[pyramid_level]
+        for iter_num in range(max_iter):
+            cur_I2 = warp_image(cur_I2, u, v)
+            u,v = faster_lucas_kanade_step(pyramid_I1[pyramid_level],cur_I2, window_size)
+        # done iterations, need to complete one more wrap
+        if pyramid_level:
+            # will be executed only when not the image's level
+            dim = (pyramid_I1[pyramid_level-1].shape[1], pyramid_I1[pyramid_level-1].shape[0])
+            u = cv2.resize(u, dim)
+            v = cv2.resize(u, dim)
     return u, v
 
 
@@ -469,8 +513,73 @@ def lucas_kanade_faster_video_stabilization(
     Returns:
         None.
     """
-    """INSERT YOUR CODE HERE."""
-    pass
+    input_cap = cv2.VideoCapture(input_video_path)
+    # create output video
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    fps = input_cap.get(cv2.CAP_PROP_FPS)
+    w = int(input_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(input_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    out_cap = cv2.VideoWriter(output_video_path,fourcc, fps, (w,h))
+    frame_count = int(input_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    # first frame
+    rval, first_frame = input_cap.read()
+    out_cap.write(first_frame)
+
+    first_frame_gray = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
+
+    # resize first frame
+    h_factor = int(np.ceil(first_frame_gray.shape[0] / (2 ** num_levels)))
+    w_factor = int(np.ceil(first_frame_gray.shape[1] / (2 ** num_levels)))
+    IMAGE_SIZE = (w_factor * (2 ** num_levels),
+                  h_factor * (2 ** num_levels))
+
+    if first_frame_gray.shape != IMAGE_SIZE:
+        first_frame_gray = cv2.resize(first_frame_gray, IMAGE_SIZE)
+
+    # create u, v
+    u = np.zeros(first_frame_gray.shape)
+    v = np.zeros(first_frame_gray.shape)
+
+    boarder = int(window_size/2)
+    prev_frame = first_frame_gray
+    prev_u = u
+    prev_v = v
+    # create progress bar
+    for i in tqdm(range(frame_count)):
+        rval, cur_frame = input_cap.read()
+        if rval:
+            # a - resize frame
+            grey_cur_frame = cv2.cvtColor(cur_frame, cv2.COLOR_BGR2GRAY)
+            grey_cur_frame_resized = cv2.resize(grey_cur_frame, IMAGE_SIZE)
+            # b - perform LK
+            u, v = faster_lucas_kanade_optical_flow(prev_frame, grey_cur_frame_resized, window_size, max_iter, num_levels)
+            # c - calc mean of u and v
+            mean_u = np.mean(u[boarder:-boarder,boarder:-boarder])
+            mean_v = np.mean(v[boarder:-boarder,boarder:-boarder])
+            # d - update u and v to their mean value
+            u[boarder:-boarder, boarder:-boarder] = mean_u
+            v[boarder:-boarder, boarder:-boarder] = mean_v
+            # e - add u and v from previous frame
+            u = u + prev_u
+            v = v + prev_v
+            # f - save for next frame
+            prev_frame = grey_cur_frame
+            prev_u = u
+            prev_v = v
+            # g - wrap
+            warped_frame = warp_image(grey_cur_frame_resized, u, v)
+            # save frame
+            next_frame = warped_frame.astype(np.uint8)
+            next_frame = cv2.cvtColor(next_frame, cv2.COLOR_GRAY2BGR)
+            # todo: this resize is not ok, need to think this trough
+            next_frame = cv2.resize(next_frame, (w,h))
+            out_cap.write(next_frame)
+            cv2.imwrite("river_frames/frame%d.jpg" % i, next_frame)
+
+    input_cap.release()
+    out_cap.release()
+    cv2.destroyAllWindows()
 
 
 def lucas_kanade_faster_video_stabilization_fix_effects(
