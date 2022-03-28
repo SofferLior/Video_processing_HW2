@@ -127,13 +127,13 @@ def lucas_kanade_step(I1: np.ndarray,
             A = np.column_stack((A_Ix,A_Iy))
             b = It[idx_row-boundary:idx_row+boundary+1, idx_col-boundary:idx_col+boundary+1].reshape(squared_N)
             try:
-                x, res, rank, s = np.linalg.lstsq(A,b,rcond=None)  # TODO: check rcond
-                du[idx_row,idx_col] = x[0]
-                dv[idx_row,idx_col] = x[1]
-            except np.linalg.LinAlgError:
-                print('did not convarge')
-                pass
+                #x, res, rank, s = np.linalg.lstsq(A,b,rcond=None)  # TODO: check rcond
+                x = (-np.linalg.inv(np.transpose(A)@A))@np.transpose(A)@b
 
+            except np.linalg.LinAlgError:
+                x=(0,0)
+            du[idx_row, idx_col] = x[0]
+            dv[idx_row, idx_col] = x[1]
     return du, dv
 
 
@@ -174,8 +174,8 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     dim = (image.shape[1], image.shape[0])
     u = cv2.resize(u, dim)
     v = cv2.resize(v, dim)
-    u = u/u_factor
-    v = v/v_factor
+    u = u*u_factor
+    v = v*v_factor
 
     # step 2: wrap image
     # create a mesh grid
@@ -187,14 +187,13 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     x_flattened = x_mesh.flatten() + u.flatten()
     y_flattened = y_mesh.flatten() + v.flatten()
 
-    flattened_image = image.flatten()
-    # first - where we know the points
-    # values - what are the value in those points
-    # xi - the grid
-    image_warp = griddata((x_flattened, y_flattened), flattened_image, (x_mesh, y_mesh), fill_value=np.nan)
+    flattened_image = image.copy().flatten()
+        #image_warp = griddata((x_mesh.flatten(), y_mesh.flatten()), flattened_image, (x_flattened, y_flattened), fill_value=np.nan).reshape(image.shape)
+    image_warp = griddata(np.stack([x_mesh.flatten(),y_mesh.flatten()],axis=-1),flattened_image, np.stack([x_flattened,y_flattened],axis=-1), fill_value=np.nan).reshape(image.shape)
+
     # step 3: fill the np.nan values
     if len(image_warp[np.isnan(image_warp)]):
-        print('filling NAN values')
+        #print('filling NAN values')
         image_warp[np.isnan(image_warp)] = image[np.isnan(image_warp)]
 
     return image_warp
@@ -256,18 +255,18 @@ def lucas_kanade_optical_flow(I1: np.ndarray,
     # note to myself - smallest level is the last
     for pyramid_level in range(len(pyarmid_I2)-1, -1, -1):
         #print(f'pyramdi level: {pyramid_level}, image shapr{pyramid_I1[pyramid_level].shape}, u shape: {u.shape}')
-        cur_I2 = pyarmid_I2[pyramid_level]
+        cur_I2 = warp_image(pyarmid_I2[pyramid_level], u, v)
         for iter_num in range(max_iter):
+            du, dv = lucas_kanade_step(pyramid_I1[pyramid_level], cur_I2, window_size)
+            u = u + dv
+            v = v + dv
             cur_I2 = warp_image(cur_I2, u, v)
-            u,v = lucas_kanade_step(pyramid_I1[pyramid_level],cur_I2, window_size)
         # done iterations, need to complete one more wrap
         if pyramid_level:
             # will be executed only when not the image's level
             dim = (pyramid_I1[pyramid_level-1].shape[1], pyramid_I1[pyramid_level-1].shape[0])
-            u = cv2.resize(u, dim)
-            v = cv2.resize(u, dim)
-            u = 2*u
-            v = 2*v
+            u = 2*cv2.resize(u, dim)
+            v = 2*cv2.resize(u, dim)
         #print(f'pyramdi level: {pyramid_level}, image shapr{pyramid_I1[pyramid_level].shape}, u shape: {u.shape}')
     return u, v
 
@@ -328,14 +327,14 @@ def lucas_kanade_video_stabilization(input_video_path: str,
     fps = input_cap.get(cv2.CAP_PROP_FPS)
     w = int(input_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(input_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    out_cap = cv2.VideoWriter(output_video_path,fourcc, fps, (w,h))
+    out_cap = cv2.VideoWriter(output_video_path,fourcc, fps, (w,h), False)
     frame_count = int(input_cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # first frame
     rval, first_frame = input_cap.read()
-    out_cap.write(first_frame)
 
     first_frame_gray = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
+    out_cap.write(first_frame_gray)
 
     # resize first frame
     h_factor = int(np.ceil(first_frame_gray.shape[0] / (2 ** num_levels)))
@@ -380,7 +379,6 @@ def lucas_kanade_video_stabilization(input_video_path: str,
             warped_frame = warp_image(grey_cur_frame_resized, u, v)
             # save frame
             next_frame = warped_frame.astype(np.uint8)
-            next_frame = cv2.cvtColor(next_frame, cv2.COLOR_GRAY2BGR)
             # todo: this resize is not ok, need to think this trough
             next_frame = cv2.resize(next_frame, (w,h))
             out_cap.write(next_frame)
@@ -491,10 +489,9 @@ def faster_lucas_kanade_optical_flow(
         if pyramid_level:
             # will be executed only when not the image's level
             dim = (pyramid_I1[pyramid_level-1].shape[1], pyramid_I1[pyramid_level-1].shape[0])
-            u = cv2.resize(u, dim)
-            v = cv2.resize(u, dim)
-            u = 2*u
-            v = 2*v
+            u = 2* cv2.resize(u, dim)
+            v = 2* cv2.resize(u, dim)
+            #todo: add here wrap next level image
     return u, v
 
 
@@ -519,14 +516,15 @@ def lucas_kanade_faster_video_stabilization(
     fps = input_cap.get(cv2.CAP_PROP_FPS)
     w = int(input_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(input_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    out_cap = cv2.VideoWriter(output_video_path,fourcc, fps, (w,h))
+    out_cap = cv2.VideoWriter(output_video_path,fourcc, fps, (w,h), False)
     frame_count = int(input_cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
     # first frame
     rval, first_frame = input_cap.read()
-    out_cap.write(first_frame)
+    #out_cap.write(first_frame)
 
     first_frame_gray = cv2.cvtColor(first_frame, cv2.COLOR_BGR2GRAY)
+    out_cap.write(first_frame_gray)
 
     # resize first frame
     h_factor = int(np.ceil(first_frame_gray.shape[0] / (2 ** num_levels)))
@@ -546,12 +544,13 @@ def lucas_kanade_faster_video_stabilization(
     prev_u = u
     prev_v = v
     # create progress bar
-    for i in tqdm(range(frame_count)):
+    for i in tqdm(range(2)): # frame_count)):
         rval, cur_frame = input_cap.read()
         if rval:
             # a - resize frame
             grey_cur_frame = cv2.cvtColor(cur_frame, cv2.COLOR_BGR2GRAY)
             grey_cur_frame_resized = cv2.resize(grey_cur_frame, IMAGE_SIZE)
+            # todo: check here if divide by 255
             # b - perform LK
             u, v = faster_lucas_kanade_optical_flow(prev_frame, grey_cur_frame_resized, window_size, max_iter, num_levels)
             # c - calc mean of u and v
@@ -571,7 +570,7 @@ def lucas_kanade_faster_video_stabilization(
             warped_frame = warp_image(grey_cur_frame_resized, u, v)
             # save frame
             next_frame = warped_frame.astype(np.uint8)
-            next_frame = cv2.cvtColor(next_frame, cv2.COLOR_GRAY2BGR)
+            # next_frame = cv2.cvtColor(next_frame, cv2.COLOR_GRAY2BGR)
             # todo: this resize is not ok, need to think this trough
             next_frame = cv2.resize(next_frame, (w,h))
             out_cap.write(next_frame)
