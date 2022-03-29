@@ -13,7 +13,7 @@ ID2 = '203764170'
 
 # Choose parameters
 WINDOW_SIZE_TAU = 5  # Add your value here!
-MAX_ITER_TAU = 5  # Add your value here!
+MAX_ITER_TAU = 3  # Add your value here!
 NUM_LEVELS_TAU = 5  # Add your value here!
 
 
@@ -90,7 +90,6 @@ print(f'LK-Video Stabilization FASTER implementation took WITHOUT BORDERS: '
       f'{end_time - start_time:.2f}[sec]')
 statistics["[TAU, TIME] FASTER, WITHOUT BORDERS LK implementation "] = \
     end_time - start_time
-
 
 
 print("The Following MSE values should make sense to you:")
