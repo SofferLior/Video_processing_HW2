@@ -166,7 +166,7 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     Returns:
         image_warp: np.ndarray. Warped image.
     """
-
+    image_warp = image.copy()
     # step 1: resize + norm
     u_factor = image.shape[1] / u.shape[1]
     v_factor = image.shape[0] / v.shape[0]
@@ -186,7 +186,7 @@ def warp_image(image: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
     x_flattened = x_mesh.flatten() + u.flatten()
     y_flattened = y_mesh.flatten() + v.flatten()
 
-    flattened_image = image.copy().flatten()
+    flattened_image = image_warp.flatten()
     image_warp = griddata((x_mesh.flatten(), y_mesh.flatten()), flattened_image, (x_flattened, y_flattened), fill_value=np.nan).reshape(image.shape)
 
     # step 3: fill the np.nan values
